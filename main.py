@@ -1,22 +1,47 @@
 import os
+import sys
 from dotenv import load_dotenv
-import google.generativeai as genai
+from google.genai import types
+from google import genai
 
-# Load environment variables
 load_dotenv()
-api_key = os.getenv("GOOGLE_API_KEY")
 
-# Configure Google API key
-genai.configure(api_key=api_key)
+def main():
+    load_dotenv()
 
-# Use the Gemini 2.0 Flash model
-model = genai.GenerativeModel(model_name="gemini-2.0-flash-001")
+    verbose = "--verbose" in sys.argv
+    args = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
 
-# Send a simple prompt
-response = model.generate_content("Why is Boot.dev such a great place to learn backend development? Use one paragraph maximum.")
+    if not args:
+        print("AI Code Assistant")
+        print('\nUsage: python main.py "your prompt here" [--verbose]')
+        print('Example: python main.py "How do I build a calculator app?"')
+        sys.exit(1)
 
-# Print the response text
-print(response.text)
-usage = response.usage_metadata
-print(f"Prompt tokens: {usage.prompt_token_count}")
-print(f"Response tokens: {usage.candidates_token_count}")
+    user_prompt = " ".join(args)
+
+    api_key = os.getenv("GEMINI_API_KEY")
+    genai.configure(api_key=api_key)
+
+    messages = [
+        types.Content(role="user", parts=[types.Part(text=user_prompt)]),
+]
+
+
+    model = genai.GenerativeModel("gemini-2.0-flash-001")
+    generate_content(model, messages, verbose)
+
+
+def generate_content(model, messages, verbose):
+    response = model.generate_content(messages)
+
+    if verbose:
+        print("Prompt tokens:", response.usage_metadata.prompt_token_count)
+        print("Response tokens:", response.usage_metadata.candidates_token_count)
+
+    print("Response:")
+    print(response.text)
+
+
+if __name__ == "__main__":
+    main()
