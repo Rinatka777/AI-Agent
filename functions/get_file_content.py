@@ -11,9 +11,9 @@ def get_file_content(working_directory, file_path):
             return f'Error: "{file_path}" is not a file'
         
         MAX_CHARS = 10000
-
-        with open(file_path, "r") as f:
-            file_content_string = f.read(MAX_CHARS)
+        with open(target_path, 'r', encoding='utf-8') as f:
+            return f.read(MAX_CHARS)
+        
     
     except Exception as e:
         return f"Error: {str(e)}"
