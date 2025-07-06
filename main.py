@@ -3,11 +3,12 @@ import sys
 from dotenv import load_dotenv
 from google.genai import types
 from google import genai
-from functions.get_files_info import schema_get_files_info, get_files_info
+from functions.get_files_info import schema_get_files_info, get_files_info, schema_get_file_content, get_file_content
 
 available_functions = types.Tool(
     function_declarations=[
         schema_get_files_info,
+        schema_get_file_content,
     ]
 )
 
@@ -77,6 +78,11 @@ def generate_content(client, messages, verbose):
             if function_call_part.name == "get_files_info":
                 directory = function_call_part.args.get("directory")
                 result = get_files_info(WORKING_DIRECTORY, directory)
+                print(result)
+
+            if function_call_part.name == "get_file_content":
+                file_path = function_call_part.args.get("file_path")
+                result = get_file_content(WORKING_DIRECTORY, file_path)
                 print(result)
     else:
         print("Response:")
