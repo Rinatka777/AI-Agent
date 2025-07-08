@@ -17,6 +17,13 @@ available_functions = types.Tool(
     ]
 )
 
+function_map = {
+    "get_files_info": get_files_info,
+    "get_file_content": get_file_content,
+    "write_file": write_file,
+    "run_python_file": run_python_file,
+}
+
 system_prompt = """
 You are a helpful AI coding agent.
 
@@ -68,7 +75,6 @@ def main():
 
 
 def generate_content(client, messages, verbose):
-
     response = client.models.generate_content(
         model="gemini-2.0-flash-001",
         contents=messages,
@@ -77,7 +83,6 @@ def generate_content(client, messages, verbose):
             system_instruction=system_prompt,
         ),
     )
-
     if verbose:
         print("Prompt tokens:", response.usage_metadata.prompt_token_count)
         print("Response tokens:", response.usage_metadata.candidates_token_count)
@@ -110,6 +115,23 @@ def generate_content(client, messages, verbose):
         print("Response:")
         print(response.text)
 
+def call_function(function_call_part, verbose=False):
+    if verbose:
+        print(f"Calling function: {function_call_part.name}({function_call_part.args})")
+    else:
+        print(f" - Calling function: {function_call_part.name}")
+
+    func = function_map.get(function_call_part.name)
+    if func is None:
+        return f"Error: Unknown function '{function_call_part.name}'"
+
+    kwargs = dict(function_call_part.args)
+    kwargs["working_directory"] = WORKING_DIRECTORY
+
+    try:
+        return func(**kwargs)
+    except Exception as e:
+        return f"Error: Failed to execute function: {e}"
 
 if __name__ == "__main__":
     main()
