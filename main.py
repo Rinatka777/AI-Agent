@@ -3,60 +3,21 @@ import sys
 from dotenv import load_dotenv
 from google.genai import types
 from google import genai
-from functions.get_files_info import schema_get_files_info, get_files_info
-from functions.get_file_content import schema_get_file_content, get_file_content
-from functions.run_python import schema_run_python_file, run_python_file
-from functions.write_file import schema_write_file, write_file
+from call_function import call_function, available_functions
+from prompts import system_prompt
 
-available_functions = types.Tool(
-    function_declarations=[
-        schema_get_files_info,
-        schema_get_file_content,
-        schema_run_python_file,
-        schema_write_file
-    ]
-)
-
-function_map = {
-    "get_files_info": get_files_info,
-    "get_file_content": get_file_content,
-    "write_file": write_file,
-    "run_python_file": run_python_file,
-}
-
-system_prompt = """
-You are a helpful AI coding agent.
-
-When a user asks a question or makes a request, create a plan using function calls. You can perform the following operations:
-
-- List files and directories
-- Read file contents
-- Execute Python files with optional arguments
-- Write or overwrite files
-
-All paths you provide must be relative to the working directory. You do not need to specify the working directory in your function calls — it is automatically injected for safety and sandboxing.
-
-Use function calls when appropriate. Avoid making assumptions about file contents or execution results without reading or running them first.
-"""
-
-
-WORKING_DIRECTORY = "calculator"
 
 
 def main():
     load_dotenv()
 
     verbose = "--verbose" in sys.argv
-    
-    args = []
-    for arg in sys.argv[1:]:
-        if not arg.startswith("--"):
-            args.append(arg)
+    args = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
 
     if not args:
         print("AI Code Assistant")
         print('\nUsage: python main.py "your prompt here" [--verbose]')
-        print('Example: python main.py "How do I build a calculator app?"')
+        print('Example: python main.py "How do I fix the calculator?"')
         sys.exit(1)
 
     api_key = os.environ.get("GEMINI_API_KEY")
@@ -78,60 +39,32 @@ def generate_content(client, messages, verbose):
     response = client.models.generate_content(
         model="gemini-2.0-flash-001",
         contents=messages,
-        config = types.GenerateContentConfig(
-            tools=[available_functions],
-            system_instruction=system_prompt,
+        config=types.GenerateContentConfig(
+            tools=[available_functions], system_instruction=system_prompt
         ),
     )
     if verbose:
         print("Prompt tokens:", response.usage_metadata.prompt_token_count)
         print("Response tokens:", response.usage_metadata.candidates_token_count)
-    if response.function_calls:
-        for function_call_part in response.function_calls:
-            print(f"Calling function: {function_call_part.name}({function_call_part.args})")
 
-            if function_call_part.name == "get_files_info":
-                directory = function_call_part.args.get("directory")
-                result = get_files_info(WORKING_DIRECTORY, directory)
-                print(result)
+    if not response.function_calls:
+        return response.text
 
-            if function_call_part.name == "get_file_content":
-                file_path = function_call_part.args.get("file_path")
-                result = get_file_content(WORKING_DIRECTORY, file_path)
-                print(result)
+    function_responses = []
+    for function_call_part in response.function_calls:
+        function_call_result = call_function(function_call_part, verbose)
+        if (
+            not function_call_result.parts
+            or not function_call_result.parts[0].function_response
+        ):
+            raise Exception("empty function call result")
+        if verbose:
+            print(f"-> {function_call_result.parts[0].function_response.response}")
+        function_responses.append(function_call_result.parts[0])
 
-            if function_call_part.name == "run_python_file":
-                file_path = function_call_part.args.get("file_path")
-                result = run_python_file(WORKING_DIRECTORY, file_path)
-                print(result)
+    if not function_responses:
+        raise Exception("no function responses generated, exiting.")
 
-            elif function_call_part.name == "write_file":
-                file_path = function_call_part.args.get("file_path")
-                content = function_call_part.args.get("content")
-                result = write_file(WORKING_DIRECTORY, file_path, content)
-                print(result)
-
-    else:
-        print("Response:")
-        print(response.text)
-
-def call_function(function_call_part, verbose=False):
-    if verbose:
-        print(f"Calling function: {function_call_part.name}({function_call_part.args})")
-    else:
-        print(f" - Calling function: {function_call_part.name}")
-
-    func = function_map.get(function_call_part.name)
-    if func is None:
-        return f"Error: Unknown function '{function_call_part.name}'"
-
-    kwargs = dict(function_call_part.args)
-    kwargs["working_directory"] = WORKING_DIRECTORY
-
-    try:
-        return func(**kwargs)
-    except Exception as e:
-        return f"Error: Failed to execute function: {e}"
 
 if __name__ == "__main__":
     main()
